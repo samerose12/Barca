@@ -1,20 +1,27 @@
 import pygame as p
 import barca_engine as BarcaEngine
 import numpy as np
-import barca_AI as AI
+import barca_AI_fast as AI
+import pandas as pd
+from numba.typed import Dict
+from numba import njit
 
 
-
-WIDTH = HEIGHT = 800
+WIDTH = HEIGHT = 700
 DIMENSION = 10
 SQ_SIZE = HEIGHT//DIMENSION
 MAX_FPS = 30
-#rook is mouse, bishop is lion, queen is elephant
-PIECES = {1: 'wR', 2: 'wB', 3: 'wQ',
-          -1: 'bR', -2: 'bB', -3: 'bQ'}
+
+PIECES = {1: 'wM', 2: 'wL', 3: 'wE',
+          -1: 'bM', -2: 'bL', -3: 'bE'}
 IMAGES = {}
 WATERING_HOLES = [(3, 3), (3, 6), (6, 3), (6, 6)]
-DEPTH = 2
+# hashes = pd.read_pickle('ZobristHash')
+# numba_hashes = Dict.empty(key_type=np.int64, value_type=np.float64)
+
+
+DRAW = True
+
 
 def load_images():
     for number, name in PIECES.items():
@@ -37,26 +44,55 @@ def checkWin(board):
         return True
     return False
 
+def initZob():
+    rng = np.random.default_rng(918237456)
+    zob = np.array([[[rng.integers(low=1, high=np.iinfo(np.int64).max) for _ in range(len(PIECES))]for _ in range(DIMENSION)]for _ in range(DIMENSION)])
+    return zob
+
+
+
+
+
 
 
 def main():
-
-    p.init()
-    height_offset = 0
-    screen = p.display.set_mode((WIDTH, HEIGHT+height_offset))
-    clock = p.time.Clock()
-    screen.fill(p.Color("white"))
-
-
+    if DRAW:
+        p.init()
+        height_offset = 0
+        screen = p.display.set_mode((WIDTH, HEIGHT+height_offset))
+        clock = p.time.Clock()
+        screen.fill(p.Color("white"))
+        load_images()
+    #set_numba_dict(hashes, numba_hashes)
     gs = BarcaEngine.GameState()
-    load_images()
+
+    zob = initZob()
+    turn = 1
     while not checkWin(gs.board):
-        draw_game_state(screen, gs, False)
-        validMoves = gs.getAllValidMoves()
-        move = AI.findBestMove(gs, validMoves)
-        gs.makeMove(move)
-        clock.tick(MAX_FPS)
-        p.display.flip()
+        piece_locations = np.zeros((1, 2))
+        for loc in gs.piece_locations.values():
+            piece_locations = np.append(piece_locations, np.array([loc[0][0], loc[0][1]]).reshape(-1, 2),
+                                        axis=0)
+            piece_locations = np.append(piece_locations, np.array([loc[1][0], loc[1][1]]).reshape(-1, 2),
+                                        axis=0)
+        turn = 1 if gs.white_to_move else -1
+
+        move = AI.findBestMove(gs.board.copy(), piece_locations[1:], turn)
+        move = np.array(move, dtype=np.int)
+
+        m = BarcaEngine.Move(move[0], move[1], gs)
+        gs.makeMove(m)
+
+        print(m.getNotation())
+        if DRAW:
+            for e in p.event.get():
+                if e.type == p.QUIT:
+                    running = False
+            draw_game_state(screen, gs, False)
+            clock.tick(MAX_FPS)
+            p.display.flip()
+
+
 
 
 def draw_game_state(screen, gs, flip_board):

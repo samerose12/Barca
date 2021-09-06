@@ -1,7 +1,9 @@
 import pygame as p
 import barca_engine as BarcaEngine
 import numpy as np
-import barca_AI as AI
+import barca_AI_fast as AI
+#import barca_AI as AI
+#import concurrent.futures
 
 
 WIDTH = HEIGHT = 800
@@ -9,8 +11,8 @@ DIMENSION = 10
 SQ_SIZE = HEIGHT//DIMENSION
 MAX_FPS = 60
 #rook is mouse, bishop is lion, queen is elephant
-PIECES = {1: 'wR', 2: 'wB', 3: 'wQ',
-          -1: 'bR', -2: 'bB', -3: 'bQ'}
+PIECES = {1: 'wM', 2: 'wL', 3: 'wE',
+          -1: 'bM', -2: 'bL', -3: 'bE'}
 IMAGES = {}
 WATERING_HOLES = [(3, 3), (3, 6), (6, 3), (6, 6)]
 
@@ -25,7 +27,7 @@ def main():
     height_offset = 0
     screen = p.display.set_mode((WIDTH, HEIGHT+height_offset))
     clock = p.time.Clock()
-    screen.fill(p.Color("white"))
+    screen.fill(p.Color("grey"))
 
 
     gs = BarcaEngine.GameState()
@@ -44,11 +46,8 @@ def main():
     automove = False
 
     moves_to_highlight = []
-    explanation_mode = False
-    explainations = []
 
     flip_board = False
-
 
     while running:
         for e in p.event.get():
@@ -57,10 +56,26 @@ def main():
 
             if automove and computer_should_play:
                 automove = False
-                validMoves = gs.getAllValidMoves()
-                move = AI.findBestMove(gs, validMoves)
-                gs.makeMove(move)
-                validMoves = gs.getAllValidMoves()
+
+                r, c = np.where(gs.board != 0)
+                piece_locations = np.c_[r, c]
+                turn = 1 if gs.white_to_move else -1
+
+                move = AI.findBestMove(gs.board.copy(), piece_locations, turn)
+                move = np.array(move, dtype=np.int)
+
+                m = BarcaEngine.Move(move[0], move[1], gs)
+                gs.makeMove(m)
+
+                print(m.getNotation())
+
+
+                # validMoves = gs.getAllValidMoves()
+                # move = AI.findBestMove(gs, validMoves)
+                # gs.makeMove(move)
+                # print(move.getNotation())
+
+
                 moveCounter += 1
                 # WIN CONDITION
                 white_count = 0
@@ -78,10 +93,18 @@ def main():
                 else:
                     validMoves = gs.getAllValidMoves()
                     moveCounter += 1
+            # else:
+            #     with concurrent.futures.ThreadPoolExecutor() as executor:
+            #         r, c = np.where(gs.board != 0)
+            #         piece_locations = np.c_[r, c]
+            #         turn = 1 if gs.white_to_move else -1
+            #         future = executor.submit(AI.findBestMove, gs.board.copy(), piece_locations, turn)
+            #         arrow_move = future.result()
+            #         print(arrow_move)
 
             #mouse down
             if e.type == p.MOUSEBUTTONDOWN and mouse_down is False:
-                explanation_mode = False
+                #if e.button == 1: #the left is 1, the right is 3
                 location = translate(p.mouse.get_pos(),flip_board) #(x, y)
                 if location[0] > WIDTH or location[0] < 0 or location[1] > HEIGHT or location[1] < 0: continue
                 col = location[0] // SQ_SIZE
@@ -117,7 +140,7 @@ def main():
                         automove = True
                         mouse_down = False
                         gs.makeMove(move)
-                        print(move.getNotation(), scoreBoard(gs))
+                        print(move.getNotation())
                         sq_selected = ()
                         player_clicks = []
                         moving_piece = ()
@@ -245,12 +268,13 @@ def draw_game_state(screen, gs, skip_piece, flip_board):
         screen.blit(p.transform.rotate(screen, 180), (0, 0))
 
 def draw_board(screen):
-    colors = [p.Color(235, 235, 208), p.Color(119, 148, 85)]
+    #colors = [p.Color(235, 235, 208), p.Color(119, 148, 85)]
+    colors = [p.Color(252, 204, 116), p.Color(138, 120, 93)]
     for r in range(DIMENSION):
         for c in range(DIMENSION):
             color = colors[(r+c)%2]
             p.draw.rect(screen, color, p.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
-    p.draw.rect(screen, p.Color('green'), p.Rect(HEIGHT, 0, 200, WIDTH))
+    #p.draw.rect(screen, p.Color('green'), p.Rect(HEIGHT, 0, 200, WIDTH))
     for r, c in WATERING_HOLES:
         p.draw.circle(screen, p.Color(0, 0, 255), ((c + 0.5) * SQ_SIZE, (r + 0.5) * SQ_SIZE), SQ_SIZE / 2, width=3)
 

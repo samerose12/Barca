@@ -60,24 +60,51 @@ class GameState():
             self.white_to_move = not self.white_to_move
 
 
-    def checkNeighborsForScare(self, r, c, moves):
+    def checkNeighborsForScare(self, r, c):
         piece = self.board[r, c]
         turn = np.sign(piece)
         if abs(piece) == 3: piece = 0
-        rw, cw = np.where(self.board[r - 1:r + 2, c - 1:c + 2] == -turn * (abs(piece) + 1))
-        if len(rw) > 0:
-            moves.append((r, c))
+        if c == 0:
+            if r == 0:
+                rw, cw = np.where(self.board[r:r + 2, c:c + 2] == -turn * (abs(piece) + 1))
+            else:
+                rw, cw = np.where(self.board[r - 1:r + 2, c:c + 2] == -turn * (abs(piece) + 1))
+        else:
+            if r == 0:
+                rw, cw = np.where(self.board[r:r + 2, c - 1:c + 2] == -turn * (abs(piece) + 1))
+            else:
+                rw, cw = np.where(self.board[r - 1:r + 2, c - 1:c + 2] == -turn * (abs(piece) + 1))
+
+        return len(rw) > 0 or len(cw) > 0
+
+
+    def checkNeighborsCanScare(self, r, c):
+
+        piece = self.board[r, c]
+        turn = np.sign(piece)
+        if abs(piece) == 1: piece = turn*4
+        if c == 0:
+            if r == 0:
+                rw, cw = np.where(self.board[r:r + 2, c:c + 2] == -turn * (abs(piece) - 1))
+            else:
+                rw, cw = np.where(self.board[r - 1:r + 2, c:c + 2] == -turn * (abs(piece) - 1))
+        else:
+            if r == 0:
+                rw, cw = np.where(self.board[r:r + 2, c - 1:c + 2] == -turn * (abs(piece) - 1))
+            else:
+                rw, cw = np.where(self.board[r - 1:r + 2, c - 1:c + 2] == -turn * (abs(piece) - 1))
+
+        return len(rw) > 0 or len(cw) > 0
 
 
 
     def getNonValidMoves(self):
-
-        # get king of person of current turn
-        turn = 1 if self.white_to_move else -1
+        #turn = 1 if self.white_to_move else -1
         attackers = []
         for piece, sqaures in self.piece_locations.items():
             for r, c in sqaures:
-                self.checkNeighborsForScare(r, c, attackers)
+                if self.checkNeighborsForScare(r, c):
+                    attackers.append((r, c))
         return attackers
 
 
@@ -99,41 +126,38 @@ class GameState():
                 scores = []
 
             turn = np.sign(val)
-            if (turn == 1 and self.white_to_move) or (turn == -1 and self.white_to_move is False):
-                piece = abs(val)  # gives unsigned piece
 
-                # mouse
-                if piece == 1:
-                    self.getRookMoves(r, c, turn, moves)
-                # lion
-                elif piece == 2:
-                    self.getBishopMoves(r, c, turn, moves)
-                # elephant
-                elif piece == 3:
-                    self.getRookMoves(r, c, turn, moves)
-                    self.getBishopMoves(r, c, turn, moves)
+            piece = abs(val)  # gives unsigned piece
 
-                #dont let king move into check
-                temp_board = self.board.copy()
+            # mouse
+            if piece == 1:
+                self.getRookMoves(r, c, turn, moves)
+            # lion
+            elif piece == 2:
+                self.getBishopMoves(r, c, turn, moves)
+            # elephant
+            elif piece == 3:
+                self.getRookMoves(r, c, turn, moves)
+                self.getBishopMoves(r, c, turn, moves)
 
-                for move in moves:
+            #dont let king move into check
+            temp_board = self.board.copy()
 
-                    self.board[move.getPos()] = move.piece
-                    self.board[move.startRow, move.startCol] = 0
-                    self.piece_locations[move.piece][move.piece_index] = (move.endRow, move.endCol)
+            for move in moves:
 
-                    attackers = []
-                    if len(np.where(np.sign(self.board[move.endRow - 1:move.endRow + 2, move.endCol - 1:move.endCol + 2]) == -turn)[0]) > 0:
-                        self.checkNeighborsForScare(move.endRow, move.endCol, attackers)
+                self.board[move.getPos()] = move.piece
+                self.board[move.startRow, move.startCol] = 0
+                self.piece_locations[move.piece][move.piece_index] = (move.endRow, move.endCol)
 
-                    if len(attackers) == 0:
-                        clean_moves.append(move)
-                        if getScore:
-                            boards.append(self.board.copy())
-                            scores.append(score_func(self))
+                attackers = []
+                if not self.checkNeighborsForScare(move.endRow, move.endCol):
+                    clean_moves.append(move)
+                    if getScore:
+                        boards.append(self.board.copy())
+                        scores.append(score_func(self))
 
-                    self.piece_locations[move.piece][move.piece_index] = (move.startRow, move.startCol)
-                    self.board = temp_board.copy()
+                self.piece_locations[move.piece][move.piece_index] = (move.startRow, move.startCol)
+                self.board = temp_board.copy()
 
             if getScore:
                 return boards, scores
@@ -145,15 +169,18 @@ class GameState():
         #get all moves
         moves = []
         currently_attacked = self.getNonValidMoves()
+        turn = 1 if self.white_to_move else -1
         if len(currently_attacked) > 0:
             for r, c in currently_attacked:
-                moves.extend(self.getMovesForPiece(r, c))
+                if np.sign(self.board[r, c]) == turn:
+                    moves.extend(self.getMovesForPiece(r, c))
 
 
         if len(currently_attacked) == 0 or len(moves) == 0:
             for piece, locations in self.piece_locations.items():
-                for r, c in locations:
-                    moves.extend(self.getMovesForPiece(r, c))
+                if np.sign(piece) == turn:
+                    for r, c in locations:
+                        moves.extend(self.getMovesForPiece(r, c))
         return moves
 
 
@@ -163,6 +190,7 @@ class GameState():
         left = (c - np.where(self.board[r, :c] == 0)[0])[::-1]
         right = np.where(self.board[r, c:] == 0)[0]
         all_arr = [above, below, left, right]
+
 
         for i, a in enumerate(all_arr):
             w = np.where([a[i] == i + 1 for i in range(len(a))])[0]
@@ -223,7 +251,7 @@ class Move():
         self.endCol = end[1]
         self.piece = gs.board[self.startRow, self.startCol]
         self.moveID = self.startRow * 1000 + self.startCol * 100 + self.endRow * 10 + self.endCol
-        self.piece_index = gs.piece_locations[self.piece].index(start)
+        self.piece_index = gs.piece_locations[self.piece].index((self.startRow, self.startCol))
 
     def __eq__(self, other):
         if isinstance(other, Move):
